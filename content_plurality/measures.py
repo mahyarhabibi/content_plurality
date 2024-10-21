@@ -25,7 +25,7 @@ def gvi_tox_removal(tweet_embd, tweet_ids, df, GVI, scale, metric='tox',
                          tox_scores = np.arange(1, 0.15, -0.05), c_reg=0, SEED=None):
     
     """
-    Computes GVI of embeddings when toxic contents are removed.
+    Returns GVI volumes after content moderation at different toxicity thresholds.
     tweet_embd: np ndarray of tweet embeddings.
     tweet_id: np array of tweet ids.
     df: pd.DataFrame contaninig tweet_id, and toxicity scores
@@ -61,3 +61,104 @@ def gvi_tox_removal(tweet_embd, tweet_ids, df, GVI, scale, metric='tox',
         sample_size.append(sample_frac)
 
     return gvi_detox, gvi_random, sample_size
+
+
+
+#################################################################
+# IQR metric
+def compute_iqr(X: np.ndarray, q_low = 5, q_high = 95):
+    """
+    Returns IQR volume of input embedding array between percentile q_low and q_high.
+    X: embedding array.
+    """
+    qh_values = np.percentile(X, q = q_high, axis=0)
+    ql_values = np.percentile(X, q = q_low, axis=0)
+    
+    differences = qh_values - ql_values
+    log_diff = np.log(differences)
+    
+    volume = np.sum(log_diff)
+    return volume
+
+
+def iqr_tox_removal(tweet_embd: np.ndarray, tweet_ids, df, q_low, q_high, metric='tox',
+                         tox_scores = np.arange(1, 0.45, -0.05), SEED=None):
+    
+    """
+    Returns IQR volumes after content moderation at different toxicity thresholds.
+    tweet_embd: input embedding array.
+    tweet_ids: np array of tweet ids.
+    df: pd DataFrame of tweet_ids and toxicity socres.
+    q_low: lower threshold in compute_iqr.
+    q_high: upper threshold in compute_iqr.
+    metric: toxicity metric name.
+    tox_scores: toxicity removal thresholds.
+    """
+    
+    if SEED is not None:
+        np.random.seed(SEED) 
+        
+    volume_detox = []
+    volume_random = []
+    sample_size = []
+    
+    for score in tqdm(tox_scores):   
+        
+        # remove toxic
+        not_tox_ids = df[df[metric] <= score]['tweet_id'].values.tolist()  # Filter out the most toxic tweets
+        X = tweet_embd[np.isin(tweet_ids, not_tox_ids)]
+        volume = compute_iqr(X, q_low, q_high)
+        volume_detox.append(volume)
+        
+        # remove random
+        sample_ids = np.random.choice(tweet_ids, size=X.shape[0], replace=False)
+        X = tweet_embd[np.isin(tweet_ids, sample_ids)]
+        volume = compute_iqr(X, q_low, q_high)
+        volume_random.append(volume)
+        
+        # sampling ratio
+        sample_frac = X.shape[0]/tweet_embd.shape[0]
+        sample_size.append(sample_frac)
+        
+    return volume_detox, volume_random, sample_size
+
+####################################################
+# MAD
+def mad_tox_removal(embedding, arr_ids, df_tox, tox_scores = np.arange(1, 0.45, -0.05), metric='tox',  SEED=0):
+    """
+    Returns mean Abs deviation volumes after content moderation at different toxicity thresholds.
+    embedding: input embedding array.
+    arr_ids: np array of tweet ids.
+    df_tox: pd DataFrame of tweet_ids and toxicity socres.
+    metric: toxicity metric name.
+    tox_scores: toxicity removal thresholds.
+    """
+    
+    np.random.seed(SEED)  
+    volume_detox = []
+    volume_random = []
+    sample_size = []
+    
+    for score in tqdm(tox_scores):   
+        
+        # remove toxic
+        not_tox_ids = df_tox[df_tox[metric] <= score]['tweet_id'].values.tolist()  # Filter out the most toxic tweets
+        X_detox = embedding[np.isin(arr_ids, not_tox_ids)]
+        X_detox_mean = np.mean(X_detox, axis=0).reshape(1,-1)
+        arr_ad = np.abs(X_detox - X_detox_mean)
+        volume = np.mean(arr_ad)
+        volume_detox.append(volume)
+        
+        # remove random
+        sample_ids = np.random.choice(arr_ids, size=X_detox.shape[0], replace=False)
+        X_sample = embedding[np.isin(arr_ids, sample_ids)]
+        X_sample_mean = np.mean(X_sample, axis=0).reshape(1,-1)
+        arr_ad = np.abs(X_sample - X_sample_mean)
+        volume = np.mean(arr_ad)
+        volume_random.append(volume)
+        
+        # sampling ratio
+        sample_frac = X_detox.shape[0]/embedding.shape[0]
+        sample_size.append(sample_frac)
+
+    return volume_detox, volume_random, sample_size
