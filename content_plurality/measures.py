@@ -162,3 +162,26 @@ def mad_tox_removal(embedding, arr_ids, df_tox, tox_scores = np.arange(1, 0.45, 
         sample_size.append(sample_frac)
 
     return volume_detox, volume_random, sample_size
+
+#####################################################
+# compute pairwise cosine similarity between embeddings
+from sklearn.metrics.pairwise import cosine_similarity
+
+def compute_pw_cosim(X, stat='mean'):
+
+    """Returns mean pairwise cosine similarity of the input embedding"""
+
+    # Compute the pairwise cosine similarity matrix
+    cosine_sim_matrix = cosine_similarity(X)
+    
+    # Get the upper triangular values excluding the diagonal 
+    # ( avoids double counting and including self similarity)
+    upper_tri_indices = np.triu_indices_from(cosine_sim_matrix, k=1)
+    upper_tri_values = cosine_sim_matrix[upper_tri_indices]
+    
+    if stat == 'mean':
+        return np.mean(upper_tri_values)
+    elif stat == 'median':
+        return np.median(upper_tri_values)
+    else:
+        raise ValueError("Invalid stat specified. Use 'mean' or 'median'.")
